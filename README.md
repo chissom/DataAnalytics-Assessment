@@ -33,3 +33,54 @@ Identify customers who have at least one funded savings plan **and** one funded 
   A customer might open 10 savings plans but fund only 3.  
   By adding `funded_savings_count` and `funded_investment_count`, we gain visibility into funding rates per customer.  
   This extra layer of analysis can help Cowrywise focus on improving plan funding success—identifying customers who open plans but never fund them, and tailoring engagement accordingly.
+
+
+
+
+
+## Question 2: Transaction Frequency Analysis
+
+**Objective:**  
+Segment customers by how frequently they transact on their savings accounts, classifying them into:
+- **High Frequency** (≥10 transactions/month)  
+- **Medium Frequency** (3–9 transactions/month)  
+- **Low Frequency** (≤2 transactions/month)  
+
+For each segment, report:
+- `frequency_category`
+- `customer_count`
+- `avg_transactions_per_month`
+
+---
+
+### Approach
+
+1. **Bucket by Year–Month**  
+   - Used the `transaction_date` timestamp in `savings_savingsaccount` to extract both `YEAR(transaction_date)` and `MONTH(transaction_date)`.  
+   - Grouped by `owner_id`, year, and month to count each customer’s total transactions per calendar month.
+
+2. **Compute Individual Averages**  
+   - Averaged those monthly counts per customer to get `avg_txn_per_month`.  
+
+3. **Categorize**  
+   - Applied a `CASE` expression on each customer’s average:
+     - ≥10 → **High Frequency**  
+     - 3–9 → **Medium Frequency**  
+     - ≤2 → **Low Frequency**  
+
+4. **Aggregate for Reporting**  
+   - Grouped by `frequency_category` to count customers in each bucket (`customer_count`) and to compute the segment’s overall average transactions per month (`avg_transactions_per_month`), rounded to one decimal.
+
+---
+
+### Challenges & Resolutions
+
+- **No Explicit “Month” Column**  
+  The table lacked a dedicated month field, so I couldn’t directly group by “month.”  
+  **Solution:** I extracted the year and month components from the `transaction_date` timestamp using `YEAR(transaction_date)` and `MONTH(transaction_date)`. This allowed me to accurately bucket transactions into calendar months for each customer.
+
+- **Ensuring Accurate Boundaries**  
+  With the derived year–month buckets, it was critical to verify there were no off-by-one errors at the category edges (2→3 and 9→10 transactions). The clear `CASE` logic (with `>=`, `BETWEEN`, and `ELSE`) ensures every average value falls into exactly one category.
+
+By deriving month information from `transaction_date` and carefully structuring the CTEs, we achieved a clean, performant query that segments users by transaction frequency.```
+
