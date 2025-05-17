@@ -134,3 +134,78 @@ Flag every active savings or investment plan that has gone **365 days** without 
 By combining customer and plan–level activity flags with the one-year cutoff on verified inflows, this query reliably surfaces only those live accounts that need an inactivity check.```
 
 
+
+
+## Question 4: Customer Lifetime Value (CLV) Estimation
+
+**Objective:**
+Estimate a basic **Customer Lifetime Value (CLV)** for each user using transaction behavior and account tenure.
+The formula used is:
+
+```text
+CLV = (total_transactions / tenure_months) * 12 * avg_profit_per_transaction
+```
+
+We assume `avg_profit_per_transaction` is **0.1%** of the **average confirmed transaction amount**.
+
+---
+
+### Approach
+
+1. **Join Users to Transactions via Plans**
+
+   * To trace transactions to a customer, we first join:
+
+     * `users_customuser` → `plans_plan` (via `owner_id`)
+     * Then `plans_plan` → `savings_savingsaccount` (via `plan_id`)
+   * This ensures that only transactions tied to valid user plans are counted.
+
+2. **Calculate Tenure in Months**
+
+   * Used `TIMESTAMPDIFF(MONTH, u.date_joined, CURRENT_DATE)` to compute how long each user has held an account.
+   * Wrapped the result in `GREATEST(..., 1)` to avoid division by zero for users who joined less than a month ago.
+
+3. **Count Transactions and Compute Average Value**
+
+   * Used `COUNT(s.id)` for total transactions and `AVG(s.confirmed_amount / 100)` to compute average transaction value (converted from **kobo to naira**).
+   * Only `confirmed_amount` values are used to ensure we exclude failed or pending inflows.
+
+4. **Compute Estimated CLV**
+
+   * CLV is estimated using:
+
+     ```sql
+     (COUNT(transactions) / tenure_months) * 12 * 0.001 * avg_transaction_value
+     ```
+   * Multiplied by `12` to annualize the lifetime value.
+   * Multiplied by `0.001` to reflect 0.1% assumed profit margin on each transaction.
+
+5. **Output Fields**
+
+   * `customer_id`
+   * `name`
+   * `tenure_months`
+   * `total_transactions`
+   * `estimated_clv` (rounded to 2 decimal places)
+   * Results are sorted in **descending order** of `estimated_clv`.
+
+---
+
+### Challenges & Solutions
+
+* **Avoiding Division by Zero**
+
+  * Used `GREATEST(..., 1)` to force a minimum of 1 month tenure so users who signed up recently don’t break the calculation.
+
+* **Why Join Through Plans?**
+
+  * Savings transactions aren’t tied directly to users. They link to `plans_plan`, which in turn is linked to `users_customuser`. This two-step join ensures that each transaction can be confidently assigned to a user.
+
+* **Why Use Confirmed Amounts?**
+
+  * `confirmed_amount` ensures only actual credited amounts are included. Using unconfirmed or placeholder values could distort profit or transaction counts.
+
+* **Why Use 0.1% Profit Margin?**
+
+  * In absence of real profit-per-transaction data, we assume a simplified constant profit rate of **0.1%** for estimation purposes.
+
